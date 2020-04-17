@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using System.Windows.Forms;
 using static WinKeyRecorder.InputStructs;
 
@@ -22,7 +23,7 @@ namespace WinKeyRecorder
                 // Get each action for this Frame/Timestamp (most of the time it will be a single action - but could be multiples).
                 foreach (var key in kvp.Value)
                 {
-                    inputs.Add(ConvertKeyToInput(key.Key, key.Timestamp, key.Flag));
+                    inputs.Add(ConvertKeyToInput(key.Key, key.Flag));
                     sequence.KeySequence += string.Format(KeySequenceSegmentFormat, key.Key, key.Action, key.Timestamp);
                 }
 
@@ -35,7 +36,8 @@ namespace WinKeyRecorder
 
         private const int KEYBOARDEVENT = 1;
         private const int SCANVALUE = 0;
-        private static INPUT ConvertKeyToInput(Keys key, long timeActual, uint flags)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static INPUT ConvertKeyToInput(Keys key, uint flags)
         {
             return new INPUT
             {

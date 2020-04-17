@@ -39,40 +39,48 @@ namespace WinKeyRecorder
             if (!Playing)
             {
                 KeyPlayingTask = Task.Run(
-                        async () =>
+                    async () =>
+                    {
+                        var currentTimestamp = 0L;
+                        var keyInputSequences = KeyInputSequencer.BuildSequence(keyPlaybackBuffer);
+                        var enumerator = keyInputSequences.GetEnumerator();
+
+                        SW = new Stopwatch();
+                        SW.Start();
+
+                        while (enumerator.MoveNext())
                         {
-                            var currentTimestamp = 0L;
-                            var keyInputSequences = KeyInputSequencer.BuildSequence(keyPlaybackBuffer);
-                            var enumerator = keyInputSequences.GetEnumerator();
-
-                            SW = new Stopwatch();
-                            SW.Start();
-
-                            while (enumerator.MoveNext())
+                            try
                             {
-                                try
-                                {
-                                    await Task.Delay(interludeDelay);
+                                await Task.Delay(interludeDelay);
 
-                                    currentTimestamp = SW.ElapsedMicroseconds();
-                                    var err = NativeMethods.SendInput(
-                                        (uint)enumerator.Current.InputSequence.Length,
-                                        enumerator.Current.InputSequence,
-                                        Marshal.SizeOf(typeof(INPUT)));
+                                currentTimestamp = SW.ElapsedMicroseconds();
+                                var err = NativeMethods.SendInput(
+                                    (uint)enumerator.Current.InputSequence.Length,
+                                    enumerator.Current.InputSequence,
+                                    Marshal.SizeOf(typeof(INPUT)));
 
-                                    if (err > 1)
-                                    { await KeyEventMessageChannelWriter.WriteAsync(string.Format(SendInputError, err)); }
-                                    else
-                                    { await KeyEventMessageChannelWriter.WriteAsync(string.Format(KeySequenceInputLog, enumerator.Current.KeySequence, currentTimestamp)); }
-                                }
-                                catch (Exception ex)
+                                if (err > 1)
                                 {
-                                    await KeyEventMessageChannelWriter.WriteAsync(string.Format(UknownError, ex.Message, ex.StackTrace));
+                                    await KeyEventMessageChannelWriter
+                                        .WriteAsync(string.Format(SendInputError, err)); }
+                                else
+                                {
+                                    await KeyEventMessageChannelWriter
+                                        .WriteAsync(
+                                            string.Format(KeySequenceInputLog, enumerator.Current.KeySequence, currentTimestamp));
                                 }
                             }
+                            catch (Exception ex)
+                            {
+                                await KeyEventMessageChannelWriter
+                                    .WriteAsync(
+                                        string.Format(UknownError, ex.Message, ex.StackTrace));
+                            }
+                        }
 
-                            Playing = false;
-                        });
+                        Playing = false;
+                    });
             }
         }
 
@@ -81,45 +89,56 @@ namespace WinKeyRecorder
             if (!Playing)
             {
                 KeyPlayingTask = Task.Run(
-                        async () =>
+                    async () =>
+                    {
+                        var currentTimestamp = 0L;
+                        var keyInputSequences = KeyInputSequencer.BuildSequence(keyPlaybackBuffer);
+                        var enumerator = keyInputSequences.GetEnumerator();
+
+                        SW = new Stopwatch();
+                        SW.Start();
+
+                        while (enumerator.MoveNext())
                         {
-                            var currentTimestamp = 0L;
-                            var keyInputSequences = KeyInputSequencer.BuildSequence(keyPlaybackBuffer);
-                            var enumerator = keyInputSequences.GetEnumerator();
-
-                            SW = new Stopwatch();
-                            SW.Start();
-
-                            while (enumerator.MoveNext())
+                            try
                             {
-                                try
+                                // Sleep - Long Wait - Low CPU
+                                currentTimestamp = SW.ElapsedMicroseconds();
+                                var millisecondsToSleep = (enumerator.Current.FrameTimestamp - currentTimestamp) / 1_000.0 - ThresholdAwaitTaskDelayInMilliseconds;
+                                if (millisecondsToSleep > SleepAccuracyAdjustmentInMicroseconds)
+                                { await Task.Delay((int)millisecondsToSleep); }
+
+                                // NO-OP - Short Wait - High CPU
+                                while (SW.ElapsedMicroseconds() < enumerator.Current.FrameTimestamp - SleepAccuracyAdjustmentInMicroseconds) { }
+
+                                currentTimestamp = SW.ElapsedMicroseconds();
+                                var err = NativeMethods.SendInput(
+                                    (uint)enumerator.Current.InputSequence.Length,
+                                    enumerator.Current.InputSequence,
+                                    Marshal.SizeOf(typeof(INPUT)));
+
+                                if (err > 1)
                                 {
-                                    // Sleep - Long Wait - Low CPU
-                                    currentTimestamp = SW.ElapsedMicroseconds();
-                                    var millisecondsToSleep = (enumerator.Current.FrameTimestamp - currentTimestamp) / 1_000.0 - ThresholdAwaitTaskDelayInMilliseconds;
-                                    if (millisecondsToSleep > SleepAccuracyAdjustmentInMicroseconds)
-                                    { await Task.Delay((int)millisecondsToSleep); }
-
-                                    // NO-OP - Short Wait - High CPU
-                                    while (SW.ElapsedMicroseconds() < enumerator.Current.FrameTimestamp - SleepAccuracyAdjustmentInMicroseconds) { }
-
-                                    currentTimestamp = SW.ElapsedMicroseconds();
-                                    var err = NativeMethods.SendInput((uint)enumerator.Current.InputSequence.Length, enumerator.Current.InputSequence, Marshal.SizeOf(typeof(INPUT)));
-                                    if (err > 1)
-                                    {
-                                        await KeyEventMessageChannelWriter.WriteAsync(string.Format(SendInputError, err));
-                                    }
-                                    else
-                                    { await KeyEventMessageChannelWriter.WriteAsync(string.Format(KeySequenceInputLog, enumerator.Current.KeySequence, currentTimestamp)); }
+                                    await KeyEventMessageChannelWriter
+                                    .WriteAsync(string.Format(SendInputError, err));
                                 }
-                                catch (Exception ex)
+                                else
                                 {
-                                    await KeyEventMessageChannelWriter.WriteAsync(string.Format(UknownError, ex.Message, ex.StackTrace));
+                                    await KeyEventMessageChannelWriter
+                                    .WriteAsync(
+                                        string.Format(KeySequenceInputLog, enumerator.Current.KeySequence, currentTimestamp));
                                 }
                             }
+                            catch (Exception ex)
+                            {
+                                await KeyEventMessageChannelWriter
+                                    .WriteAsync(
+                                        string.Format(UknownError, ex.Message, ex.StackTrace));
+                            }
+                        }
 
-                            Playing = false;
-                        });
+                        Playing = false;
+                    });
             }
         }
     }

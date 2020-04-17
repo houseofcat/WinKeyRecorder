@@ -19,8 +19,8 @@ namespace WinKeyRecorder
         public ChannelReader<string> KeyChannelReader { get; }
         private ChannelWriter<string> KeyChannelWriter { get; }
 
-        // Pinning against the Garbage Collector;
-        private NativeMethods.LowLevelKeyboardProc KeyboardHookProc;
+        // Pinning to protect from/against the Garbage Collector;
+        private readonly NativeMethods.LowLevelKeyboardProc KeyboardHookProc;
 
         public bool IsStarted { get; private set; }
 
@@ -86,8 +86,10 @@ namespace WinKeyRecorder
                 var action = wParam.ToInt32();
                 (var actionString, var flag) = NativeMethods.GetActivityFlags(action);
 
-                KeyChannelWriter.TryWrite(string.Format(KeyEventTemplate, key, actionString, time)); // Send to buffer for Async writes to UI.
+                // Send to buffer for Async writes to UI.
+                KeyChannelWriter.TryWrite(string.Format(KeyEventTemplate, key, actionString, time)); 
 
+                // Allows multiple keypresses on the same frame time.
                 if (KeyPlaybackBuffer.ContainsKey(time))
                 {
                     KeyPlaybackBuffer[time].Add(
